@@ -175,7 +175,14 @@ export default function Studio() {
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
   const [logs, setLogs] = useState<string[]>([]);
+  const logEndRef = useRef<HTMLDivElement>(null); // スクロール先の参照
+  const [history, setHistory] = useState<{ role: string; content: string }[]>([]);
   const [subtitle, setSubtitle] = useState('');
+
+  // logs が更新されるたびにスクロール
+  useEffect(() => {
+    logEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [logs]);
 
   useEffect(() => {
     let disposed = false;
@@ -293,13 +300,17 @@ export default function Studio() {
     setInput('');
     setSubtitle('');
 
+    // ユーザー発話を履歴に追加
+    const newHistory = [...history, { role: "user", content: userText }];
+    setHistory(newHistory);
+
     try {
       await resumeAudio();
 
       const r = await fetch('/api/ai/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ input: userText }),
+        body: JSON.stringify({ messages: newHistory }),
       });
 
       if (!r.ok) throw new Error(`chat api ${r.status}`);
@@ -307,6 +318,10 @@ export default function Studio() {
       const answer: string = j.message || 'うーん…わかりません';
 
       setSubtitle(answer);
+
+      // AI応答も履歴に追加
+      const updatedHistory = [...newHistory, { role: "assistant", content: answer }];
+      setHistory(updatedHistory);
 
       const { emotion, stripped } = parseLeadingEmotionTag(answer);
       applyExpressionByEmotion(emotion);
@@ -319,6 +334,13 @@ export default function Studio() {
       setBusy(false);
       setTimeout(() => setSubtitle(''), 4000);
     }
+  }
+
+  function handleReset() {
+    setHistory([]);     // 会話履歴を消す
+    setLogs([]);        // ログも消す
+    setSubtitle('');    // テキストもクリア
+    localStorage.clear(); // 設定も初期化したい場合
   }
 
   return (
@@ -335,11 +357,11 @@ export default function Studio() {
           fontSize: 14,
           maxWidth: '60%'
         }}>
-          {subtitle || '…'}
+          {subtitle || '・・・'}
         </div>
       </div>
 
-      <div style={{ borderLeft: '1px solid #e5e7eb', display: 'flex', flexDirection: 'column' }}>
+      <div style={{ height: '100vh', borderLeft: '1px solid #e5e7eb', display: 'flex', flexDirection: 'column' }}>
         <div style={{ padding: 12, borderBottom: '1px solid #e5e7eb', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
           <div>
             <label>Speaker</label>
@@ -378,10 +400,18 @@ export default function Studio() {
           >
             送信
           </button>
+          <button
+            onClick={handleReset}
+            style={{ padding: '6px 12px', marginTop: 8 }}
+          >
+            リセット
+          </button>
         </div>
 
-        <div style={{ flex: 1, overflow: 'auto', padding: 12, fontSize: 12, whiteSpace: 'pre-wrap' }}>
+        <div style={{ height: '100%', flex: 1, overflow: 'auto', padding: 12, fontSize: 12, whiteSpace: 'pre-wrap' }}>
           {logs.map((l, i) => <div key={i}>{l}</div>)}
+          {/* ダミー要素で一番下を参照 */}
+          <div ref={logEndRef} />
         </div>
       </div>
     </div>

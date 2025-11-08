@@ -48,9 +48,9 @@ export default async function handler(
 
   try {
     // リクエストボディから入力テキストを取得
-    const { input } = req.body;
-    if (!input) {
-      return res.status(400).json({ error: "No input provided" });
+    const { messages } = req.body;
+    if (!messages || !Array.isArray(messages)) {
+      return res.status(400).json({ error: "No messages provided" });
     }
 
     // Agent APIのURL（環境変数で設定可能）
@@ -66,12 +66,7 @@ export default async function handler(
       },
       body: JSON.stringify({
         model: "gpt-4o-mini",  // ダミーのモデル名（Agent側で実際のモデルにマッピング）
-        messages: [
-          {
-            role: "user",
-            content: input,
-          },
-        ],
+        messages,
       }),
     });
 
@@ -87,7 +82,10 @@ export default async function handler(
     
     // メッセージを取得（OpenAI形式）
     // カスタマイズ: レスポンス形式が異なる場合はここを調整
-    const message = data?.choices?.[0]?.message?.content || "No output";
+    let message = data?.choices?.[0]?.message?.content || "No output";
+
+    // 不要な "assistant:" を削除
+    message = message.replace(/assistant:\s*/gi, "").trim();
 
     // フロントエンドに返答を返す
     return res.status(200).json({ message });
