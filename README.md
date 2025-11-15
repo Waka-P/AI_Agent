@@ -8,7 +8,7 @@ Live2Dキャラクターと音声合成（VOICEVOX）を使ったAIチャット�
 - VOICEVOX ENGINE (ローカル): http://127.0.0.1:50021
 - Google Generative AI API キー（Gemini用）
 
-## セットアップ手順
+## セットアップの手順
 
 ### 1. リポジトリのクローン
 
