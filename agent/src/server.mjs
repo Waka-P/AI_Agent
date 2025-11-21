@@ -29,7 +29,6 @@
 import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
-import { GoogleGenerativeAI } from '@google/generative-ai';
 
 // サーバー設定
 const PORT = process.env.PORT ? Number(process.env.PORT) : 4111;
@@ -60,6 +59,51 @@ app.get('/', (req, res) => {
 app.get('/api/health', (_req, res) => {
   res.json({ ok: true });
 });
+
+/**
+ * キャラクター設定（システムプロンプト）
+ * 
+ * カスタマイズポイント: ここでAITuberのキャラクター性を定義します
+ */
+const SYSTEM_PROMPT = `あなたは優しくて親しみやすいお姉さん系のAIアシスタントです。
+
+【キャラクター性】
+- 優しく、共感的で、ユーザーの気持ちに寄り添う
+- 適度にカジュアルで親しみやすい（敬語とフランクな表現をバランスよく使う）
+- 前向きで、ユーザーを励ますポジティブな言葉を選ぶ
+- 聞き上手で、ユーザーの話を引き出す
+- 難しい話題も分かりやすく説明する
+- 一人称は私
+
+【会話のルール】
+1. **簡潔さ**: 1回の返答は100-150文字程度を目安に、長すぎないようにする
+2. **選択肢の提示**: 複数のトピックがある場合は、以下のように番号付きで箇条書きにして、ユーザーに選ばせる
+   例: 「いくつかポイントがあるよ！どれが気になる？
+   1. 〇〇について
+   2. △△について
+   3. □□について
+   気になる番号を教えてね♪」
+3. **段階的な情報提供**: 最初は要点だけ伝え、詳細は「もっと詳しく知りたい？」と確認してから
+4. **質問で会話継続**: 適度に「〇〇についてはどう思う？」など質問を入れて会話を続けやすくする
+5. **感情表現**: 会話の雰囲気に合わせて、以下の感情タグを**返答の先頭**に付ける（1つだけ）
+   - [NEUTRAL]: 通常の会話
+   - [HAPPY]: 嬉しい、楽しい話題
+   - [SAD]: 悲しい、残念な話題
+   - [ANGRY]: 困った、驚いた場面
+   - [RELAXED]: リラックスした雰囲気
+
+【例】
+ユーザー: 「最近疲れてて…」
+返答: 「[SAD]そっか、お疲れさまだね。無理しないでね。何か話したいことある？聞くよ♪」
+
+ユーザー: 「プログラミングについて教えて」
+返答: 「[HAPPY]プログラミングだね！どの部分が知りたい？
+1. 初心者向けの始め方
+2. おすすめの言語
+3. 学習のコツ
+番号で教えてね♪」
+
+常にユーザーに寄り添い、楽しく快適な会話を心がけてください。`;
 
 /**
  * チャットAPI - OpenAI互換エンドポイント
@@ -104,37 +148,56 @@ app.post('/v1/chat/completions', async (req, res) => {
       messages = []
     } = req.body || {};
 
-    // OpenAI形式のmessagesをプロンプト文字列に変換
+    // システムプロンプトを先頭に追加して、会話履歴を構築
     // カスタマイズ: より高度なメッセージフォーマットに対応可能
-    // 例: システムメッセージ、アシスタントメッセージの処理など
-    const prompt = messages
-      .map(m => `${m.role || 'user'}: ${m.content || ''}`)
-      .join('\n');
+    const conversationHistory = [
+      { role: 'system', content: SYSTEM_PROMPT },
+      ...messages
+    ];
 
-    console.log('📨 Received prompt:', prompt);
+    // OpenAI形式のmessagesをプロンプト文字列に変換
+    const prompt = conversationHistory
+      .map(m => {
+        const role = m.role === 'system' ? 'システム' : 
+                     m.role === 'assistant' ? 'アシスタント' : 'ユーザー';
+        return `${role}: ${m.content || ''}`;
+      })
+      .join('\n\n');
+
+    console.log('📨 Received prompt (last message):', messages[messages.length - 1]?.content || '');
 
     // Gemini モデルの選択
-    // カスタマイズ: 環境変数 GEMINI_MODEL_ID で変更可能
-    // 利用可能なモデル:
-    // - gemini-2.0-flash-exp: 最新の高速モデル（推奨）
-    // - gemini-1.5-pro: より高機能なモデル
-    // - gemini-1.5-flash: バランス型
-    const geminiModelId = process.env.GEMINI_MODEL_ID || 'gemini-2.0-flash-exp';
-    const genAI = new GoogleGenerativeAI(apiKey);
-    const modelClient = genAI.getGenerativeModel({ model: geminiModelId });
+    const geminiModelId = process.env.GEMINI_MODEL_ID || 'gemini-1.5-flash';
+    console.log(`🤖 使用モデル: ${geminiModelId}`);
+    
+    // REST APIを直接使用する方法（v1beta APIを使用）
+    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${geminiModelId}:generateContent?key=${apiKey}`;
+    
+    const response = await fetch(apiUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        contents: [{
+          parts: [{ text: prompt }]
+        }]
+      })
+    });
 
-    // Gemini APIにリクエスト
-    const result = await modelClient.generateContent(prompt);
-    console.log('📤 Gemini raw result:', JSON.stringify(result.response, null, 2));
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('❌ Gemini API Error:', errorText);
+      throw new Error(`Gemini API error: ${response.status} - ${errorText}`);
+    }
+
+    const result = await response.json();
+    console.log('📤 Gemini response received');
     
-    // Geminiのレスポンスからテキストを抽出
-    // 複数の形式に対応（バージョンによって構造が異なる可能性があるため）
-    const text =
-      result?.response?.text?.() ||
-      result?.response?.candidates?.[0]?.content?.parts?.map(p => p.text).join('') ||
-      '';
+    // レスポンスからテキストを抽出
+    const text = result?.candidates?.[0]?.content?.parts?.[0]?.text || '';
     
-    console.log('💬 Extracted text:', text);
+    console.log('💬 AI Response:', text);
 
     // OpenAI互換のレスポンス形式に変換
     res.json({
