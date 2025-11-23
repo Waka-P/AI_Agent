@@ -167,7 +167,7 @@ export default function Studio() {
   const mouthCurrentRef = useRef(0);
   const mouthIdRef = useRef('ParamMouthOpenY');
 
-  const [speaker, setSpeaker] = usePersistentState<number>('cfg.speaker', 1);
+  const [speaker, setSpeaker] = usePersistentState<number>('cfg.speaker', 47);
   const [atk, setAtk] = usePersistentState<number>('cfg.mouth.attack', 0.35);
   const [dec, setDec] = usePersistentState<number>('cfg.mouth.decay', 0.18);
   const [gain, setGain] = usePersistentState<number>('cfg.mouth.gain', 1.8);
