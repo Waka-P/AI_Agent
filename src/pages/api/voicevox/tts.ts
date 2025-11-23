@@ -47,7 +47,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // リクエストボディからパラメータを取得
     const {
       text,           // 読み上げるテキスト（必須）
-      speaker = 1,    // 話者ID（デフォルト: 1 = 四国めたん）
+      speaker = 47,    // 話者ID（デフォルト: 1 = 四国めたん）
       speedScale,     // 話速（オプション、例: 1.2 = 1.2倍速）
       pitchScale,     // 音高（オプション、例: 0.1 = 高く）
       volumeScale,    // 音量（オプション、例: 1.5 = 1.5倍）
